@@ -3,8 +3,7 @@ from PIL import Image
 from keras.preprocessing.image import load_img, img_to_array
 import numpy as np
 from keras.models import load_model
-import requests
-from bs4 import BeautifulSoup
+from nutrition_db import nutrition_db
 
 model = load_model('final.h5')
 labels = {0: 'apple', 1: 'banana', 2: 'beetroot', 3: 'bell pepper', 4: 'cabbage', 5: 'capsicum', 6: 'carrot',
@@ -20,18 +19,39 @@ vegetables = ['Beetroot', 'Cabbage', 'Capsicum', 'Carrot', 'Cauliflower', 'Corn'
               'Lettuce', 'Onion', 'Peas', 'Potato', 'Raddish', 'Soy Beans', 'Spinach', 'Sweetcorn', 'Sweetpotato',
               'Tomato', 'Turnip']
 
+def get_nutrition_info(prediction):
+    """Get nutrition information from local database"""
+    prediction = prediction.lower()
+    if prediction in nutrition_db:
+        return nutrition_db[prediction]
+    return None
 
-def fetch_calories(prediction):
-    try:
-        url = 'https://www.google.com/search?&q=calories in ' + prediction
-        req = requests.get(url).text
-        scrap = BeautifulSoup(req, 'html.parser')
-        calories = scrap.find("div", class_="BNeawe iBp4i AP7Wnd").text
-        return calories
-    except Exception as e:
-        st.error("Can't able to fetch the Calories")
-        print(e)
-
+def display_nutrition_info(nutrition_data):
+    """Display nutrition information in a formatted way"""
+    if nutrition_data:
+        st.subheader("Nutrition Facts (per 100g)")
+        
+        # Create two columns
+        col1, col2 = st.columns(2)
+        
+        # Column 1: Basic nutrition facts
+        with col1:
+            st.markdown("**Basic Nutrition:**")
+            st.write(f"🔸 Calories: {nutrition_data['calories']}")
+            st.write(f"🔸 Carbohydrates: {nutrition_data['carbs']}")
+            st.write(f"🔸 Fiber: {nutrition_data['fiber']}")
+            st.write(f"🔸 Sugar: {nutrition_data['sugar']}")
+            st.write(f"🔸 Protein: {nutrition_data['protein']}")
+        
+        # Column 2: Vitamins and minerals
+        with col2:
+            st.markdown("**Vitamins:**")
+            for vitamin in nutrition_data['vitamins']:
+                st.write(f"🔸 {vitamin}")
+            
+            st.markdown("**Minerals:**")
+            for mineral in nutrition_data['minerals']:
+                st.write(f"🔸 {mineral}")
 
 def processed_img(img_path):
     img = load_img(img_path, target_size=(224, 224, 3))
@@ -40,16 +60,13 @@ def processed_img(img_path):
     img = np.expand_dims(img, [0])
     answer = model.predict(img)
     y_class = answer.argmax(axis=-1)
-    print(y_class)
     y = " ".join(str(x) for x in y_class)
     y = int(y)
     res = labels[y]
-    print(res)
     return res.capitalize()
 
-
 def run():
-    st.title("Fruits🍍-Vegetable🍅 Classification")
+    st.title("Fruits🍍-Vegetable🍅 Recognition & Nutrition Guide")
     img_file = st.file_uploader("Choose an Image", type=["jpg", "png"])
     if img_file is not None:
         img = Image.open(img_file).resize((250, 250))
@@ -58,18 +75,24 @@ def run():
         with open(save_image_path, "wb") as f:
             f.write(img_file.getbuffer())
 
-        # if st.button("Predict"):
         if img_file is not None:
             result = processed_img(save_image_path)
-            print(result)
+            
+            # Display category
             if result in vegetables:
                 st.info('**Category : Vegetables**')
             else:
                 st.info('**Category : Fruit**')
+            
+            # Display prediction
             st.success("**Predicted : " + result + '**')
-            cal = fetch_calories(result)
-            if cal:
-                st.warning('**' + cal + '(100 grams)**')
+            
+            # Get and display nutrition information
+            nutrition_data = get_nutrition_info(result)
+            if nutrition_data:
+                display_nutrition_info(nutrition_data)
+            else:
+                st.warning(f"Nutrition information for {result} is not available in our database yet.")
 
-
-run()
+if __name__ == "__main__":
+    run()
